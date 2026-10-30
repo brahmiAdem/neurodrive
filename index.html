@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NeuroDrive · Neuroevolution Lab</title>
+  <meta name="description" content="Watch neural-network cars learn to drive in your browser using a genetic algorithm. Draw your own tracks and race the AI." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230b0f17'/><circle cx='10' cy='10' r='3' fill='%233ef0b0'/><circle cx='22' cy='16' r='3' fill='%235aa9ff'/><circle cx='10' cy='22' r='3' fill='%233ef0b0'/><path d='M10 10L22 16L10 22' stroke='%23e6ebf5' stroke-width='1.5' fill='none'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32"><circle cx="9" cy="9" r="3.2"/><circle cx="23" cy="16" r="3.2" class="alt"/><circle cx="9" cy="23" r="3.2"/><path d="M9 9L23 16L9 23M9 9V23"/></svg>
+      </div>
+      <div>
+        <h1>NeuroDrive</h1>
+        <p>Cars that teach themselves to drive with neural networks and evolution</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn ghost" id="btn-about">How it works</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="stage">
+      <div class="toolbar">
+        <div class="segmented" id="track-tabs" role="tablist" aria-label="Track">
+          <button data-track="oval">Oval</button>
+          <button data-track="circuit">Circuit</button>
+          <button data-track="serpentine">Serpentine</button>
+          <button data-track="random">Random</button>
+          <button data-track="custom">✎ Draw</button>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn icon" id="btn-play" title="Pause / resume (Space)">
+            <svg viewBox="0 0 24 24" class="i-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+            <svg viewBox="0 0 24 24" class="i-play"><path d="M7 5l12 7-12 7z"/></svg>
+          </button>
+          <button class="btn icon" id="btn-skip" title="End generation now (N)">
+            <svg viewBox="0 0 24 24"><path d="M5 5l10 7-10 7zM17 5h2v14h-2z"/></svg>
+          </button>
+          <div class="segmented small" id="speed-tabs" aria-label="Simulation speed">
+            <button data-speed="1">1×</button>
+            <button data-speed="3">3×</button>
+            <button data-speed="10">10×</button>
+            <button data-speed="max">Max</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-wrap" id="canvas-wrap" tabindex="-1">
+        <canvas id="sim"></canvas>
+        <div class="hud" id="hud"></div>
+        <div class="editor-bar" id="editor-bar" hidden>
+          <span><b>Draw mode</b> · click to add a point · drag to move · right-click to delete</span>
+          <div class="editor-actions">
+            <button class="btn ghost sm" id="ed-clear">Clear</button>
+            <button class="btn ghost sm" id="ed-cancel">Cancel</button>
+            <button class="btn primary sm" id="ed-apply">Use this track</button>
+          </div>
+        </div>
+        <div class="race-bar" id="race-bar" hidden>
+          <span><b>Race mode</b> · <kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> or <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> · crashing sends you back a checkpoint</span>
+          <div class="editor-actions">
+            <button class="btn ghost sm" id="race-restart">Restart</button>
+            <button class="btn primary sm" id="race-exit">Back to training</button>
+          </div>
+        </div>
+        <div class="banner" id="banner" hidden></div>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <div class="card stats">
+        <div class="stat"><span class="label">Generation</span><span class="value" id="st-gen">1</span></div>
+        <div class="stat"><span class="label">Alive</span><span class="value" id="st-alive">0</span></div>
+        <div class="stat"><span class="label">Leader laps</span><span class="value" id="st-laps">0.00</span></div>
+        <div class="stat"><span class="label">Best fitness</span><span class="value accent" id="st-best">0</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Fitness per generation</h2>
+          <div class="legend"><span class="dot best"></span>best <span class="dot avg"></span>avg</div>
+        </div>
+        <canvas class="chart" id="chart"></canvas>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Leader's brain</h2>
+          <span class="hint mono">8 → 10 → 6 → 2</span>
+        </div>
+        <canvas class="network" id="network"></canvas>
+        <div class="io">
+          <div><span class="label">steer</span><div class="meter center"><i id="m-steer"></i></div></div>
+          <div><span class="label">gas</span><div class="meter center"><i id="m-gas"></i></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Evolution settings</h2></div>
+        <label class="field">
+          <span>Population <output id="o-pop"></output></span>
+          <input type="range" id="p-pop" min="10" max="300" step="10" />
+        </label>
+        <label class="field">
+          <span>Mutation rate <output id="o-rate"></output></span>
+          <input type="range" id="p-rate" min="0.01" max="0.5" step="0.01" />
+        </label>
+        <label class="field">
+          <span>Mutation strength <output id="o-strength"></output></span>
+          <input type="range" id="p-strength" min="0.05" max="1.5" step="0.05" />
+        </label>
+        <label class="field">
+          <span>Track width <output id="o-width"></output></span>
+          <input type="range" id="p-width" min="44" max="110" step="2" />
+        </label>
+        <p class="note">Population changes apply from the next generation.</p>
+        <button class="btn ghost full" id="btn-reset">↺ Restart evolution from scratch</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Best brain</h2><span class="hint" id="best-meta">none yet</span></div>
+        <div class="btn-grid">
+          <button class="btn ghost" id="btn-save">Save</button>
+          <button class="btn ghost" id="btn-load">Load</button>
+          <button class="btn ghost" id="btn-export">Export</button>
+          <button class="btn ghost" id="btn-import">Import</button>
+        </div>
+        <input type="file" id="file-import" accept="application/json,.json" hidden />
+        <button class="btn primary full" id="btn-race">🏁 Race the AI</button>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    Built with vanilla JavaScript and the Canvas API. No libraries, no server, and every network is trained live in your browser.
+  </footer>
+
+  <dialog id="about" class="dialog">
+    <form method="dialog">
+      <button class="close" aria-label="Close">×</button>
+    </form>
+    <h2>How it works</h2>
+    <ol class="steps">
+      <li>
+        <h3>Sense</h3>
+        <p>Each car casts <b>7 rays</b> from −90° to +90°. Each ray measures how close the nearest wall is. Those 7 distances plus the car's speed are the <b>8 inputs</b> to its brain.</p>
+      </li>
+      <li>
+        <h3>Think</h3>
+        <p>The brain is a small feed-forward <b>neural network</b> (8 → 10 → 6 → 2, tanh). It outputs a <b>steering</b> value and a <b>throttle</b> value every frame. Nobody programs how to drive. The weights start out random.</p>
+      </li>
+      <li>
+        <h3>Score</h3>
+        <p>A car dies when it hits a wall or makes no progress. Its <b>fitness</b> is the number of checkpoints it passed, plus a bonus for average pace and for finishing 3 laps.</p>
+      </li>
+      <li>
+        <h3>Evolve</h3>
+        <p>When every car has stopped, a <b>genetic algorithm</b> breeds the next generation. The top 3 brains survive unchanged (elitism). The other children come from <b>tournament selection</b>, <b>uniform crossover</b> of two parents' weights and <b>Gaussian mutation</b>.</p>
+      </li>
+    </ol>
+    <div class="tips">
+      <h3>Things to try</h3>
+      <ul>
+        <li>Train on <b>Oval</b>, then switch to <b>Serpentine</b>. Good brains generalise to tracks they've never seen.</li>
+        <li>Draw your own track with <b>✎ Draw</b>.</li>
+        <li>Push the mutation rate very high or very low and watch evolution stall.</li>
+        <li>Once the AI completes laps, hit <b>Race the AI</b> and try to beat it.</li>
+      </ul>
+      <p class="kbd-row"><kbd>Space</kbd> pause · <kbd>N</kbd> next generation · <kbd>1</kbd>–<kbd>4</kbd> speed</p>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
